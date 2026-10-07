@@ -1,4 +1,8 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>ГПБ: стратегия 18–26</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -257,6 +261,8 @@ button.reset:hover{color:var(--fg);border-color:var(--muted)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 @media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
 </style>
+</head>
+<body>
 
 <div class="wrap">
 <nav class="toc" aria-label="Оглавление">
@@ -998,3 +1004,76 @@ const BASE_NET=CH.reduce((s,c)=>s+c[3],0);
 const ROLE={perf:'<span class="chip good">перформанс</span>',mix:'<span class="chip acc">охват + перф</span>',brand:'<span class="chip vio">охват и репутация</span>'};
 function model(p){
   const s=p.bud*1e6/BASE_NET, eff=Math.pow(s,.85);
+  let rows=[],T={b:0,imp:0,cl:0,app:0,card:0,reach:0};
+  CH.forEach(c=>{const b=c[3]*s;let imp=0,cl=0,app=0,card=0;
+    if(c[2]==="CPC"){cl=c[3]/c[4]*eff;imp=cl/0.06;app=cl*c[6]*p.cr;card=app*p.a2c}
+    else if(c[2]==="CPM"){const bE=c[9]?c[9]*Math.pow(c[3]/c[9],.85):c[3];imp=bE/c[4]*1000*eff;cl=imp*c[5];app=cl*c[6]*p.cr;card=app*p.a2c}
+    else if(c[2]==="INF"){imp=c[4]*eff;cl=imp*c[5];app=cl*c[6]*p.cr;card=app*p.a2c}
+    else if(c[2]==="CPA"){card=c[3]/c[4]*s;app=card/.55;cl=app/.12}
+    else if(c[2]==="Ref"){card=c[3]/c[4]*s;app=card}
+    else {imp=10000*eff;app=800*eff*p.cr;card=app*p.a2c}
+    rows.push({n:c[0],role:c[1],m:c[2]==="INF"?"CPV":c[2],b,imp,cl,app,card,cac:b*AG*VAT/card});
+    T.b+=b;T.imp+=imp;T.cl+=cl;T.app+=app;T.card+=card;T.reach+=c[7]?imp/c[7]:0;});
+  const gross=T.b*AG*VAT, act=T.card*p.act;let ltv=0;for(let y=0;y<5;y++)ltv+=p.arpu*Math.pow(1.15,y)*Math.pow(p.ret,y);
+  return {rows,T,gross,act,ltv,cac:gross/T.card,caca:gross/act,romi:(act*ltv-gross)/gross,pay:(gross/act)/(p.arpu/12),reach:T.reach*.55};
+}
+const BASE={bud:Math.round(BASE_NET/1e5)/10,cr:1,a2c:.55,act:.60,arpu:1800,ret:.70};
+document.getElementById('cBud').value=BASE.bud;
+const M=model(BASE);
+$('#mixTbl tbody').innerHTML=M.rows.map(r=>`<tr><td>${r.n}</td><td>${ROLE[r.role]}</td><td class="mono small">${r.m}</td><td class="r">${fmt(r.b)}</td><td class="r">${r.imp?fmt(r.imp):'—'}</td><td class="r">${fmt(r.cl)}</td><td class="r">${fmt(r.app)}</td><td class="r"><strong>${fmt(r.card)}</strong></td><td class="r">${fmt(r.cac)}</td></tr>`).join('')
+ +`<tr class="tot"><td>Итого</td><td></td><td></td><td class="r">${fmt(M.T.b)}</td><td class="r">${fmt(M.T.imp)}</td><td class="r">${fmt(M.T.cl)}</td><td class="r">${fmt(M.T.app)}</td><td class="r">${fmt(M.T.card)}</td><td class="r">${fmt(M.cac)}</td></tr>`;
+$('#shareBars').innerHTML=M.rows.map(r=>{const bs=r.b/M.T.b*100,cs=r.card/M.T.card*100;return `<div class="bar-row"><span>${SHORT[r.n]}</span><div class="bar-track"><div class="bar b1" style="width:${Math.min(100,bs*2.5)}%"></div><div class="bar b2" style="width:${Math.min(100,cs*2.5)}%"></div><span class="bar-lbl">${fmt(bs,1)}% бюджета · ${fmt(cs,1)}% карт</span></div></div>`}).join('');
+const steps=[["Показы и просмотры",M.T.imp],["Клики",M.T.cl],["Заявки",M.T.app],["Выданные карты",M.T.card],["Активные карты",M.act]];
+$('#funnel').innerHTML=steps.map(s=>`<div class="f-step"><span>${s[0]}</span><div class="f-bar" style="width:${Math.max(2,Math.log10(s[1])/Math.log10(M.T.imp)*100)}%"></div><span class="num" style="text-align:right">${fmt(s[1])}</span></div>`).join('')+'<p class="small muted">Ширина полос — логарифмическая шкала.</p>';
+const net=M.T.b,ag=net*.05,vat=(net+ag)*.22;
+$('#budgetTbl tbody').innerHTML=`<tr><td>Медиабюджет нетто</td><td class="r">${rub(net)}</td></tr><tr><td>в т. ч. инфлюенсеры и трек Sqwoz Bab</td><td class="r">${rub(INF_TG+INF_V+SQ_BUDGET)}</td></tr><tr><td>Агентское вознаграждение 5%</td><td class="r">${rub(ag)}</td></tr><tr><td>НДС 22%</td><td class="r">${rub(vat)}</td></tr><tr><td>Запуск: продакшн, лендинг, ОРД, аналитика, Brand Lift</td><td class="r">${rub(PROD)}</td></tr><tr class="tot"><td>Итого с НДС</td><td class="r">${rub(net+ag+vat+PROD)}</td></tr><tr><td>Для сравнения: исходный план, исправленный, цены 2026</td><td class="r up">${rub(ORIG_GROSS)}</td></tr>`;
+$('#romiTbl tbody').innerHTML=M.rows.map(r=>{const ca=r.cac/BASE.act,ro=(M.ltv-ca)/ca*100;const chip=ro>20?'<span class="chip good">окупается</span>':ro>-20?'<span class="chip warn">на грани</span>':'<span class="chip vio">имиджевый</span>';
+  return `<tr><td>${r.n}</td><td class="r">${fmt(r.cac)} ₽</td><td class="r">${fmt(ca)} ₽</td><td class="r ${ro>=0?'down':'up'}">${ro>0?'+':''}${fmt(ro)}%</td><td>${chip}</td></tr>`}).join('');
+
+/* VK Fest */
+const FB=[["Партнёрский пакет VK Fest (запросить у VK)",6000000],["Корнер ≈64 м²: застройка, экраны, квест",2800000],["Роллапы и навигация (8 шт.) + брендинг",400000],["Подарки: 12 000 сетов × 300 ₽ (дизайн с Д. Зарыковской)",3600000],["Гонорар Д. Билана за выход на корнер (ориентир — 3 млн за частное выступление)",3000000],["Живое исполнение трека Sqwoz Bab на мини-сцене (оценка)",1500000],["Коллаборация с Д. Зарыковской: дизайн мерча (оценка)",300000],["Промоперсонал и модераторы, 2 дня",600000],["Контент и соцсети: эфиры креаторов, посевы",1200000]];
+const fNet=FB.reduce((s,x)=>s+x[1],0), fGross=fNet*AG*VAT;
+$('#festBud').innerHTML='<thead><tr><th>Статья</th><th class="r">₽ нетто</th></tr></thead><tbody>'+FB.map(x=>`<tr><td>${x[0]}</td><td class="r">${fmt(x[1])}</td></tr>`).join('')+`<tr class="tot"><td>Итого нетто / с комиссией и НДС</td><td class="r">${fmt(fNet)} / ${fmt(fGross)}</td></tr></tbody>`;
+const guests=85000, corner=guests*.20, apps=corner*.15, cards=apps*.55;
+$('#festKpi').innerHTML='<thead><tr><th>KPI</th><th class="r">Цель</th></tr></thead><tbody>'+[["Гости VK Fest Москва (база 2025)",fmt(guests)],["Посетители корнера (20%)",fmt(corner)],["Прошли антидроп-квест","≥ "+fmt(corner*.5)],["Заявки по QR (15% посетителей)",fmt(apps)],["Выданные карты (55%)",fmt(cards)],["CAC фестиваля",fmt(fGross/cards)+" ₽"],["Просмотры трансляции с упоминанием","до 30 млн"],["Охват контента креаторов с корнера","≥ 3 млн"]].map(x=>`<tr><td>${x[0]}</td><td class="r"><strong>${x[1]}</strong></td></tr>`).join('')+'</tbody>';
+
+/* hero */
+const invest=M.gross+PROD;let cumR=0,yrs=[],payYear=0;for(let y=0;y<5;y++){cumR+=M.act*BASE.arpu*Math.pow(1.15,y)*Math.pow(BASE.ret,y);yrs.push(cumR);if(!payYear&&cumR>=invest)payYear=y+1;}
+const ymax=Math.max(cumR,invest);
+$('#yearBars').innerHTML=yrs.map((v,i)=>`<div class="bar-row"><span>${i+1}-й год</span><div class="bar-track"><div class="bar b1" style="width:${v/ymax*100}%"></div><div class="bar b2" style="width:${invest/ymax*100}%"></div><span class="bar-lbl">доход ${mln(v)} ₽ · вложения ${mln(invest)} ₽ · ${v>=invest?'<b style="color:var(--good)">в плюсе на '+mln(v-invest)+' ₽</b>':'ещё '+mln(invest-v)+' ₽ до окупаемости'}</span></div></div>`).join('');
+const sumRole=(role)=>M.rows.filter(r=>r.role===role).reduce((a,r)=>({b:a.b+r.b,c:a.c+r.card}),{b:0,c:0});const PC=sumRole('perf'),pcG=PC.b*AG*VAT,romiCore=(PC.c*BASE.act*M.ltv-pcG)/pcG;const totInv=invest,roi=(M.act*M.ltv-totInv)/totInv;const pct=v=>(v>0?'+':'')+fmt(v*100)+'%';
+const K={payYear:payYear?payYear+'-м':'—',earnCards:fmt(M.T.card),earnAct:fmt(M.act),earnY1:mln(yrs[0])+' ₽',earn5:mln(M.act*M.ltv)+' ₽',profit5:(M.act*M.ltv-invest>0?'+':'')+mln(M.act*M.ltv-invest)+' ₽',funding:mln(M.act*20000)+' ₽',totalBud:mln(totInv)+' ₽',festGross:mln(fGross)+' ₽',romi:pct(M.romi),romiCore:pct(romiCore),roi:pct(roi),reachShare:fmt(Math.min(95,M.reach/13.5e6*100))+'%',ratio:fmt(M.T.card/ORIG_CARDS,0),origCac:fmt(ORIG_GROSS/ORIG_CARDS)+' ₽',newCards:fmt(M.T.card),newGross:mln(M.gross)+' ₽',newCac:fmt(M.cac)+' ₽',reach:mln(M.reach),netBud:mln(M.T.b)+' ₽'};
+document.querySelectorAll('[data-k]').forEach(el=>{if(K[el.dataset.k])el.textContent=K[el.dataset.k]});
+
+/* калькулятор */
+const ids=['cBud','cCr','cA2c','cAct','cArpu','cRet'];
+function readP(){const g=id=>+document.getElementById(id).value;return {bud:g('cBud'),cr:g('cCr')/100,a2c:g('cA2c')/100,act:g('cAct')/100,arpu:g('cArpu'),ret:g('cRet')/100}}
+function draw(){const p=readP(),m=model(p);
+  oBud.textContent=fmt(p.bud,1)+' млн ₽';oCr.textContent=fmt(p.cr*100)+'% от базы';oA2c.textContent=fmt(p.a2c*100)+'%';oAct.textContent=fmt(p.act*100)+'%';oArpu.textContent=fmt(p.arpu)+' ₽';oRet.textContent=fmt(p.ret*100)+'%';
+  const romi=m.romi*100;
+  const tiles=[["Бюджет с НДС",mln(m.gross)+' ₽'],["Выданные карты",fmt(m.T.card)],["Активные карты",fmt(m.act)],["CAC выданной",fmt(m.cac)+' ₽'],["CAC активной",fmt(m.caca)+' ₽'],["LTV за 5 лет",fmt(m.ltv)+' ₽'],["Доход когорты за 5 лет",mln(m.act*m.ltv)+' ₽'],["ROMI за 5 лет",(romi>0?'+':'')+fmt(romi)+'%',romi>=0],["Окупаемость CAC",fmt(m.pay)+' мес.']];
+  calcRes.innerHTML=tiles.map(x=>`<div class="tile${x[2]===true?' hl':''}"><span class="l">${x[0]}</span><span class="v num" ${x[2]===false?'style="color:var(--bad)"':''}>${x[1]}</span></div>`).join('');}
+ids.forEach(id=>document.getElementById(id).addEventListener('input',draw));
+$('#cReset').addEventListener('click',()=>{const v={cBud:BASE.bud,cCr:100,cA2c:55,cAct:60,cArpu:1800,cRet:70};ids.forEach(id=>document.getElementById(id).value=v[id]);draw();});
+draw();
+
+/* гант */
+const G=[["Бриф авторов, договоры, erid",[1,4],"p"],["Лендинг, ОРД, аналитика",[1,4],"p"],["Brand Lift до старта",[3,4],"g"],["Telegram-посты (до 20.12)",[5,9],"t"],["YouTube-интеграции и Shorts (до 20.12)",[5,9],"t"],["VK Клипы, VK Видео, RUTUBE — креаторы",[5,16],"b"],["Антидроп-серия",[7,15],"b"],["Антидроп-квест в 5 вузах (Татьянин день)",[14,15],"b"],["Яндекс Поиск",[5,16],"a"],["VK Реклама",[5,16],"a"],["Трек Sqwoz Bab: релиз и челлендж",[8,14],"b"],["CPA-сети и рефералка",[5,16],"a"],["Ребаланс бюджета",[8,8],"g"],["Brand Lift после",[15,16],"g"]];
+const wk=['19.10','26.10','02.11','09.11','16.11','23.11','30.11','07.12','14.12','21.12','28.12','04.01','11.01','18.01','25.01','01.02'];
+let gh='<span></span>'+wk.map(w=>`<span class="h">${w}</span>`).join('');
+G.forEach(g=>{gh+=`<span class="n">${g[0]}</span>`;for(let i=1;i<=16;i++)gh+=`<span class="c ${i>=g[1][0]&&i<=g[1][1]?g[2]:''}"></span>`});
+$('#gantt').innerHTML=gh;
+
+/* KPI */
+const kpi=[["Репутация","Узнаваемость с подсказкой у 18–26","+8 п.п.","Brand Lift VK и Яндекс"],["Репутация","Рассмотрение","+4 п.п.","Brand Lift"],["Репутация","Позитивные и нейтральные упоминания","≥ 75%","Мониторинг соцмедиа"],["Репутация","Просмотры антидроп-серии","≥ 3 млн","VK Видео, RUTUBE, Telegram"],["Охват","Уникальный охват 18–26",mln(M.reach),"Отчёты площадок"],["Креаторы","Просмотры интеграций",fmt(INF_TGV+INF_VV),"Скриншоты статистики, TGStat"],["Креаторы","CTR Telegram-поста","≥ 0,8%","UTM и промокоды"],["Креаторы","Прослушивания трека Sqwoz Bab","≥ 3 млн","VK Музыка, Яндекс Музыка"],["Бренд-безопасность","Авторы из стоп-листа (казино, финмахинации)","0","Проверка агентства + пункт договора"],["Трафик","CPC Яндекс Поиск","≤ 120 ₽","Директ"],["Конверсия","Заявки",fmt(M.T.app),"Метрика + CRM"],["Конверсия","Выданные карты",fmt(M.T.card),"CRM"],["Экономика","CAC (с НДС)","≤ "+fmt(M.cac)+" ₽","Расходы ÷ выдачи"],["Экономика","Активные карты на 30-й день","≥ 60%","Транзакции"]];
+$('#kpiTbl tbody').innerHTML=kpi.map(k=>`<tr><td><span class="chip ${k[0]==='Репутация'?'vio':k[0]==='Экономика'?'good':k[0]==='Креаторы'?'acc':'blue'}">${k[0]}</span></td><td>${k[1]}</td><td class="r"><strong>${k[2]}</strong></td><td class="small muted">${k[3]}</td></tr>`).join('');
+
+/* оглавление */
+const links=[...document.querySelectorAll('nav.toc a')];
+const io=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)links.forEach(l=>l.classList.toggle('on',l.getAttribute('href')==='#'+e.target.id))})},{rootMargin:'-30% 0px -60% 0px'});
+document.querySelectorAll('main section').forEach(s=>io.observe(s));
+})();
+</script>
+
+</body>
+</html>
